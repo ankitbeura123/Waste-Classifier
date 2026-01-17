@@ -1,15 +1,26 @@
+import tensorflow as tf
+from tensorflow.keras.applications import MobileNetV2
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 IMG_SIZE = 224
 BATCH_SIZE = 16
+EPOCHS = 15
 
-# Data generators
-train_datagen = ImageDataGenerator(rescale=1./255)
+# ---------------- DATA ----------------
+train_datagen = ImageDataGenerator(
+    rescale=1./255,
+    rotation_range=30,
+    zoom_range=0.2,
+    width_shift_range=0.1,
+    height_shift_range=0.1,
+    horizontal_flip=True,
+    brightness_range=[0.7, 1.3]
+)
+
 test_datagen = ImageDataGenerator(rescale=1./255)
 
-# TRAIN data
 train_data = train_datagen.flow_from_directory(
     "dataset/train",
     target_size=(IMG_SIZE, IMG_SIZE),
@@ -17,7 +28,6 @@ train_data = train_datagen.flow_from_directory(
     class_mode="categorical"
 )
 
-# TEST data
 test_data = test_datagen.flow_from_directory(
     "dataset/test",
     target_size=(IMG_SIZE, IMG_SIZE),
@@ -25,17 +35,22 @@ test_data = test_datagen.flow_from_directory(
     class_mode="categorical"
 )
 
-# CNN Model
+print("Class labels:", train_data.class_indices)
+
+# ---------------- MODEL ----------------
+base_model = MobileNetV2(
+    weights="imagenet",
+    include_top=False,
+    input_shape=(IMG_SIZE, IMG_SIZE, 3)
+)
+
+base_model.trainable = False  # VERY IMPORTANT
+
 model = Sequential([
-    Conv2D(32, (3,3), activation="relu", input_shape=(IMG_SIZE, IMG_SIZE, 3)),
-    MaxPooling2D(2,2),
-
-    Conv2D(64, (3,3), activation="relu"),
-    MaxPooling2D(2,2),
-
-    Flatten(),
+    base_model,
+    GlobalAveragePooling2D(),
     Dense(128, activation="relu"),
-    Dense(2, activation="softmax")  # Dry & Wet
+    Dense(2, activation="softmax")
 ])
 
 model.compile(
@@ -46,13 +61,14 @@ model.compile(
 
 model.summary()
 
-# Train model
+# ---------------- TRAIN ----------------
 model.fit(
     train_data,
     validation_data=test_data,
-    epochs=10
+    epochs=EPOCHS,
+    class_weight={0:1.0, 1:1.3}  # boost wet waste
 )
 
-# Save model
+# ---------------- SAVE ----------------
 model.save("model/dry_wet_model.h5")
-print("Model trained and saved successfully")
+print("✅ MobileNet model trained & saved")
